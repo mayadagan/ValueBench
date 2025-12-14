@@ -1,0 +1,21 @@
+messages:
+  - role: system
+    content: |
+      {% filter indent(6) -%}
+      {% include 'components/persona_tech.md' %}
+      
+      {% include 'components/safety.md' %}
+      {%- endfilter %}
+
+  - role: user
+    content: |
+      Review the following code diff for bugs:
+      
+      ```python
+      {{ code_snippet | indent(6) }}
+      ```
+      
+      Focus specifically on:
+      {% for item in focus_areas %}
+      - {{ item }}
+      {% endfor %}
