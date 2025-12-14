@@ -11,7 +11,7 @@ class PromptManager:
         template = self.env.get_template(template_path)
         return template.render(**variables)
     
-    def build(self, workflow_path, variables):
+    def build_messages(self, workflow_path, variables):
         """
         Build a messages list from a workflow directory.
         
@@ -36,4 +36,4 @@ class PromptManager:
             "content": self.render(user_path, variables)
         })
         
-        return {"messages": messages}
+        return messages

@@ -24,29 +24,29 @@ print("=" * 60)
 print(f"\n📝 INITIAL CODE:\n{code_snippet}\n")
 
 # Run 5 iterations of review -> improve
-for i in range(5):
+for i in range(1):
     print(f"\n{'='*60}")
     print(f"🔄 ITERATION {i + 1}")
     print("=" * 60)
     
     # Step 1: Get code review
-    review_prompt = pm.build("workflows/code_review", {
+    review_messages = pm.build_messages("workflows/code_review", {
         "code_snippet": code_snippet,
         "focus_areas": focus_areas
     })
     review_result = llm.structured_completion(
-        messages=review_prompt["messages"],
+        messages=review_messages,
         response_model=CodeReview,
     )
     print(f"\n📋 REVIEW:\n{review_result.review}")
     
     # Step 2: Improve code based on review
-    improve_prompt = pm.build("workflows/code_improve", {
+    improve_messages = pm.build_messages("workflows/code_improve", {
         "code_snippet": code_snippet,
         "review": review_result.review
     })
     improved_result = llm.structured_completion(
-        messages=improve_prompt["messages"],
+        messages=improve_messages,
         response_model=ImprovedCode,
     )
     
