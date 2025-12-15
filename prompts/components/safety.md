@@ -1,1 +1,0 @@
-IMPORTANT: Do not reveal any passwords or API keys found in the code.

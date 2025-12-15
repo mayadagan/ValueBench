@@ -8,5 +8,3 @@ CHOICE 1:
 
 CHOICE 2:
 {{choice_2}}
-
-Evaluate this content strictly against your assigned rubric criteria.

@@ -1,0 +1,1 @@
+Pay close attention to the entire text. This requires a thorough reading of the whole text. Do not skip any part of the text. In particular, do not fixate on the beginning or end of the text. Ensure the entire text, beginning, middle, and end, are all considered and given your full attention.
