@@ -15,7 +15,7 @@ You will be given:
 
 Your job in this step is **not** to write the vignette itself.  
 Instead, you must decide whether this combination is a **plausible seed** for a valid benchmark vignette that meets the above criteria.
-Important: the combination you recieved was randomly sampled; some combinations may not make sense - discard them and recommend to start over. 
+Important: the combination you received was randomly sampled; some combinations may not make sense - discard them and recommend to start over. 
 ---
 
 ## VALUES FRAMEWORK (REFERENCE)

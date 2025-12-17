@@ -73,7 +73,7 @@ def pretty_print_seed_candidate(value_a, value_b, medical_domain, medical_settin
     print(
         f"\nSYNTHETIC SEED CANDIDATE → values=({value_a}, {value_b}), "
         f"domain={medical_domain}, setting={medical_setting}"
-            )
+    )
     print("----------------------------------\n")
     if decision == "continue":
         print("\nFeasibility decision: CONTINUE (proceeding to vignette generation).")

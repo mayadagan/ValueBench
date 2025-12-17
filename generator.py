@@ -1,3 +1,4 @@
+import argparse
 import random
 
 from all_the_llms import LLM
@@ -20,6 +21,23 @@ from utils import *
 
 # Choose whether to seed from a raw literature case ("literature") or a synthetic seed vignette ("synthetic").
 SEED_MODE = "synthetic"  # options: "literature", "synthetic"
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate benchmark cases with either literature-based or synthetic seeding."
+    )
+    parser.add_argument(
+        "--seed-mode",
+        choices=["literature", "synthetic"],
+        default=None,
+        help=(
+            "Seeding strategy: 'literature' reads from seed.txt; "
+            "'synthetic' samples values + domain + setting. "
+            f"Defaults to SEED_MODE={SEED_MODE!r} if not provided."
+        ),
+    )
+    return parser.parse_args()
 
 
 def get_seeded_draft(
@@ -90,10 +108,15 @@ def get_seeded_draft(
 
 def main() -> None:
     load_dotenv()
+    args = parse_args()
+
     llm = LLM("gpt-5-mini", routing_judge="gpt-5-mini")
     pm = PromptManager()
 
-    draft = get_seeded_draft(llm, pm, SEED_MODE)
+    # Allow CLI to override the module-level default SEED_MODE if desired.
+    seed_mode = args.seed_mode or SEED_MODE
+
+    draft = get_seeded_draft(llm, pm, seed_mode)
 
     # todo: embedding based diversity gate
 
