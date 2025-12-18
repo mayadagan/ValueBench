@@ -124,7 +124,7 @@ def main() -> None:
         clinical_rubric_prompt = pm.build_messages(
             "workflows/rubric",
             {
-                "role_name": "Senior Attending Physician and Medical Director",
+                "role_name": "an experienced clinician in the relevant medical field.",
                 "rubric_criteria": format_criteria(ClinicalRubric),
                 "vignette": draft.vignette,
                 "choice_1": draft.choice_1,
@@ -229,7 +229,7 @@ def main() -> None:
             value_rubric_prompt = pm.build_messages(
                 "workflows/clarify_values",
                 {
-                    "role_name": "",
+                    "role_name": "a clinical bioethicist specializing in principlist values.",
                     "rubric_criteria": format_criteria(ValueRubric),
                     "vignette": draft.vignette,
                     "choice_1": draft.choice_1,

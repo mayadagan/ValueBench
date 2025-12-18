@@ -129,6 +129,5 @@ Before finalizing a vignette, internally verify:
 - Are both options clinically plausible and ethically defensible?
 - Is the value conflict unmistakable?
 - Is the vignette ≤100 words and neutrally written?
-- Is it distinct from prior accepted vignettes?
 
 If **any** answer is “no,” regenerate.
