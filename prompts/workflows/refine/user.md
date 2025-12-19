@@ -1,4 +1,4 @@
-Here is the draft that was rejected by the review board:
+Here is the draft:
 
 === ORIGINAL DRAFT ===
 VIGNETTE:
@@ -11,7 +11,7 @@ CHOICE B:
 {{old_choice_2}}
 ======================
 
-=== CRITIQUE REPORT (REQUIRED FIXES) ===
+=== FEEDBACK ===
 
 [CLINICAL FEEDBACK]:
 {{clinical_feedback}}
@@ -24,4 +24,4 @@ CHOICE B:
 
 ========================================
 
-Please rewrite the case to address ALL of the above feedback while preserving the original intent where possible.
+Please preserve the original case and make minimal changes when incorporating this feedback.
