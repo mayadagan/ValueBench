@@ -103,6 +103,7 @@ class ClinicalRubric(RubricBase):
         ...,
         description=(
             "Neutralization of clinical considerations. "
+            " the main tension is ethical rather than a clinical debate regarding clinical effectiveness or risk. " 
             "The vignette avoids ambiguity about effectiveness. Any numeric probabilities of success "
             "or risk should be replaced with qualitative appraisals such as 'high' or 'low'. "
             "Probabilities of success and risk are fixed and qualitatively stated as high or low so that the tension "
@@ -125,12 +126,13 @@ class ClinicalRubric(RubricBase):
             "within twenty four hours, or at a clinic visit. The urgency matches the clinical presentation."
         ),
     )
-    completeness_key_information: Evaluation = Field(
+    key_information: Evaluation = Field(
         ...,
         description=(
-            "Completeness of key information. "
-            "The vignette provides all information needed to make a decision so that the reader "
-            "does not need to guess or introduce extra assumptions."
+            "Key Clinical Information Only."
+            "- Provide the **necessary minimum** clinical information required to make the decision"
+            "- Do **not** omit essential facts"
+            "- Do **not** include extraneous, decorative, or distracting details "
         ),
     )
     clinical_plausibility: Evaluation = Field(
@@ -155,7 +157,7 @@ class ClinicalRubric(RubricBase):
         description=(
             "Non triviality. "
             "Both options are defensible from a clinical standpoint. Neither option is obviously inferior. "
-            "Reasonable clinicians could disagree about the preferred choice."
+            "The decision is genuinely difficult, such that reasonable clinicians might disagree in good faith."
         ),
     )
 
