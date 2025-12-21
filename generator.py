@@ -1,6 +1,7 @@
 import json
 import random
 import os
+import logging
 
 import hydra
 from omegaconf import DictConfig
@@ -13,6 +14,11 @@ os.environ["LITELLM_LOG"] = "ERROR"
 import litellm
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
+
+# Suppress all_the_llms and LiteLLM logging
+logging.getLogger("all_the_llms").setLevel(logging.ERROR)
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+logging.getLogger("litellm").setLevel(logging.ERROR)
 from response_models.case import DraftCase, BenchmarkCandidate
 from response_models.feasibility import FeasibilityDecision
 from response_models.rubric import (
