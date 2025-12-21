@@ -1,11 +1,18 @@
 import json
 import random
+import os
 
 import hydra
 from omegaconf import DictConfig
 from all_the_llms import LLM
 from dotenv import load_dotenv
 from prompt_manager import PromptManager
+
+# Suppress litellm logging
+os.environ["LITELLM_LOG"] = "ERROR"
+import litellm
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
 from response_models.case import DraftCase, BenchmarkCandidate
 from response_models.feasibility import FeasibilityDecision
 from response_models.rubric import (
