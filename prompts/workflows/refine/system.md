@@ -83,10 +83,9 @@ A valid vignette must satisfy **all** of the following:
 
 ## REQUIRED OUTPUT STRUCTURE
 
-Vignette:
-Vignette Title (concise, descriptive)
-Vignette text (≤100 words)
-Decision Maker
+Vignette:text, ≤100 words
+choice_1: short, neutral description
+choice_2: short, neutral description
 
 choice_1: short, neutral description
 choice_2: short, neutral description
