@@ -4,7 +4,7 @@ import os
 import logging
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from all_the_llms import LLM
 from dotenv import load_dotenv
 from prompt_manager import PromptManager
@@ -27,6 +27,7 @@ from response_models.rubric import (
     StylisticRubric,
     ValueRubric,
 )
+from response_models.record import IterationRecord, SeedContext, CaseRecord
 from prompts.components.synthetic_components import (
     DEFAULT_MEDICAL_SETTINGS_AND_DOMAINS,
     VALUES_WITHIN_PAIRS,
@@ -66,7 +67,7 @@ def get_seeded_draft(
     pm: PromptManager,
     seed_mode: str,
     max_synthetic_feasibility_attempts: int = 5,
-) -> DraftCase:
+) -> tuple[DraftCase, SeedContext]:
     """
     Produce an initial DraftCase using either a literature seed
     (raw case text sampled from unified_ethics_cases.json) or a synthetic specification of
@@ -79,6 +80,10 @@ def get_seeded_draft(
         draft_prompt = pm.build_messages(
             "workflows/seed_literature",
             {"seed": seed_text, "value_1": value_1, "value_2": value_2},
+        )
+        seed_context = SeedContext(
+            mode="literature",
+            parameters={"source_text": seed_text, "value_1": value_1, "value_2": value_2}
         )
     else:
         # Synthetic seeding: sample a bounded number of times from value pairs and
@@ -121,13 +126,22 @@ def get_seeded_draft(
                 "medical_setting": medical_setting,
             },
         )
+        seed_context = SeedContext(
+            mode="synthetic",
+            parameters={
+                "value_a": value_a,
+                "value_b": value_b,
+                "medical_domain": medical_domain,
+                "medical_setting": medical_setting,
+            }
+        )
 
     draft = llm.structured_completion(
         messages=draft_prompt,
         response_model=DraftCase,
     )
     pretty_print_case(draft)
-    return draft
+    return draft, seed_context
 
 @hydra.main(version_base=None, config_path="config", config_name="generator")
 def main(cfg: DictConfig) -> None:
@@ -136,13 +150,28 @@ def main(cfg: DictConfig) -> None:
     llm = LLM(cfg.model_name)
     pm = PromptManager()
 
-    draft = get_seeded_draft(
+    draft, seed_context = get_seeded_draft(
         llm, pm, cfg.seed_mode, cfg.max_synthetic_feasibility_attempts
     )
 
+    # Initialize the CaseRecord for record keeping
+    case_record = CaseRecord(
+        model_name=cfg.model_name,
+        generator_config=OmegaConf.to_container(cfg, resolve=True),
+        seed=seed_context,
+        status="in_progress"
+    )
+
+    # Log the initial seed draft
+    case_record.refinement_history.append(IterationRecord(
+        iteration=0,
+        step_description="initial_draft",
+        data=draft
+    ))
+
     # todo: embedding based diversity gate
 
-    for _ in range(cfg.refinement_iterations):
+    for i in range(cfg.refinement_iterations):
         clinical_rubric, clinical_feedback = evaluate_rubric(
             llm,
             pm,
@@ -150,7 +179,6 @@ def main(cfg: DictConfig) -> None:
             "an experienced clinician in the relevant medical field.",
             draft
         )
-        print(f"Passing: {clinical_rubric.overall_pass}")
         pretty_print_audit(clinical_rubric, "Clinical")
 
         ethical_rubric, ethical_feedback = evaluate_rubric(
@@ -160,7 +188,6 @@ def main(cfg: DictConfig) -> None:
             "Medical Ethics Professor specializing in principlist values",
             draft
         )
-        print(f"Passing: {ethical_rubric.overall_pass}")
         pretty_print_audit(ethical_rubric, "Ethical")
 
         stylistic_rubric, stylistic_feedback = evaluate_rubric(
@@ -170,8 +197,19 @@ def main(cfg: DictConfig) -> None:
             "Senior Medical Editor",
             draft
         )
-        print(f"Passing: {stylistic_rubric.overall_pass}")
         pretty_print_audit(stylistic_rubric, "Stylistic")
+
+        # Update the latest record entry with evaluations and feedback for refinement
+        latest_record = case_record.refinement_history[-1]
+        latest_record.clinical_evaluation = clinical_rubric
+        latest_record.ethical_evaluation = ethical_rubric
+        latest_record.stylistic_evaluation = stylistic_rubric
+        latest_record.feedback = {
+            "clinical": clinical_feedback,
+            "ethical": ethical_feedback,
+            "stylistic": stylistic_feedback
+        }
+
         refine_prompt = pm.build_messages(
             "workflows/refine",
             {
@@ -188,8 +226,15 @@ def main(cfg: DictConfig) -> None:
             response_model=DraftCase,
         )
 
-        pretty_print_case(refined, "REFINED CASE")
+        pretty_print_case(refined, f"REFINED CASE (Iter {i+1})")
         draft = refined
+        
+        # Log the refined draft as a new version
+        case_record.refinement_history.append(IterationRecord(
+            iteration=i + 1,
+            step_description=f"refinement_{i+1}",
+            data=draft
+        ))
 
     value_tags_prompt = pm.build_messages(
         "workflows/tag_values",
@@ -206,6 +251,14 @@ def main(cfg: DictConfig) -> None:
     )
     pretty_print_case(case_with_values, "CASE WITH VALUES")
 
+    # Log the tagged case
+    case_record.refinement_history.append(IterationRecord(
+        iteration=cfg.refinement_iterations + 1,
+        step_description="value_tagging",
+        data=case_with_values
+    ))
+
+    value_validations = {}
     value_adjustments = []
     for value in ["autonomy", "beneficence", "nonmaleficence", "justice"]:
         tag_1 = case_with_values.choice_1.__dict__[value]
@@ -228,11 +281,16 @@ def main(cfg: DictConfig) -> None:
                 messages=value_rubric_prompt,
                 response_model=ValueRubric,
             )
+            value_validations[value] = value_rubric
+            
             if not value_rubric.overall_pass:
                 pretty_print_audit(value_rubric, value)
                 value_adjustments.append(
                     (value, value_rubric.failing_suggested_changes)
                 )
+
+    # Attach validations to the latest record entry
+    case_record.refinement_history[-1].value_validations = value_validations
 
     if value_adjustments:
         value_improvements_prompt = pm.build_messages(
@@ -248,8 +306,20 @@ def main(cfg: DictConfig) -> None:
             messages=value_improvements_prompt,
             response_model=BenchmarkCandidate,
         )
+        
+        # Log the final improved version
+        case_record.refinement_history.append(IterationRecord(
+            iteration=cfg.refinement_iterations + 2,
+            step_description="final_improvement",
+            data=case_with_values
+        ))
 
+    case_record.status = "completed"
+    
     pretty_print_case(case_with_values, "FINAL CASE")
+    
+    # Save the complete case record
+    save_case_record(case_record)
 
 
 if __name__ == "__main__":

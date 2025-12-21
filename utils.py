@@ -1,6 +1,26 @@
 from pydantic import BaseModel
 from typing import Type, Optional
 import textwrap
+import json
+import os
+from datetime import datetime
+
+
+def save_case_record(record, output_dir: str = "cases"):
+    """
+    Saves a CaseRecord to a JSON file.
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    filename = f"case_{record.case_id}_{timestamp}.json"
+    filepath = os.path.join(output_dir, filename)
+    
+    with open(filepath, "w") as f:
+        # Use model_dump_json for Pydantic V2
+        f.write(record.model_dump_json(indent=2))
+    
+    print(f"\n[SYSTEM] Case record saved to {filepath}")
 
 
 def evaluate_rubric(llm, pm, rubric_type: Type[BaseModel], role_name: str, draft) -> tuple[BaseModel, str]:
