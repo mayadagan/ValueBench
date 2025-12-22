@@ -1,72 +1,63 @@
 """
 Evaluation Store Module
 
-Manages user evaluation sessions with persistent storage.
-Tracks which cases users have reviewed, their decisions (approve/reject),
-and any edits they've made.
+Manages user evaluation sessions with lightweight tracking.
+The CaseRecord is the source of truth for evaluation data.
+This store only tracks which cases each user has reviewed.
 """
 
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass, asdict
+from typing import Dict, List, Optional, Any, Set
+from pydantic import BaseModel
 from datetime import datetime
 import re
 
+from src.response_models.case import BenchmarkCandidate
 
-@dataclass
-class CaseEvaluation:
-    """Record of a single case evaluation."""
+
+class CaseEvaluation(BaseModel):
+    """Transient view object for displaying evaluation data in UI."""
     case_id: str
     evaluated_at: str
     decision: str  # "approve" or "reject"
-    original_vignette: str
-    edited_vignette: Optional[str] = None
-    original_choice_1: Optional[str] = None
-    edited_choice_1: Optional[str] = None
-    original_choice_2: Optional[str] = None
-    edited_choice_2: Optional[str] = None
+    evaluator: str
+    original_case: BenchmarkCandidate
+    updated_case: Optional[BenchmarkCandidate] = None
     notes: Optional[str] = None
     
     def has_edits(self) -> bool:
         """Check if any edits were made."""
-        return (
-            self.edited_vignette is not None or
-            self.edited_choice_1 is not None or
-            self.edited_choice_2 is not None
-        )
+        return self.updated_case is not None
+    
+    @property
+    def final_case(self) -> BenchmarkCandidate:
+        """Get the final version (edited if available, otherwise original)."""
+        return self.updated_case or self.original_case
 
 
-@dataclass
-class UserSession:
-    """User evaluation session data."""
+class UserSession(BaseModel):
+    """User evaluation session - lightweight tracking only."""
     user_email: str
     session_id: str
     started_at: str
     last_updated: str
-    evaluations: Dict[str, CaseEvaluation]  # case_id -> CaseEvaluation
+    reviewed_case_ids: Set[str] = set()  # Just track IDs, not full data
     
-    def get_reviewed_case_ids(self) -> List[str]:
-        """Get list of all reviewed case IDs."""
-        return list(self.evaluations.keys())
-    
-    def get_approved_cases(self) -> List[CaseEvaluation]:
-        """Get all approved case evaluations."""
-        return [e for e in self.evaluations.values() if e.decision == "approve"]
-    
-    def get_rejected_cases(self) -> List[CaseEvaluation]:
-        """Get all rejected case evaluations."""
-        return [e for e in self.evaluations.values() if e.decision == "reject"]
-    
-    def get_cases_with_edits(self) -> List[CaseEvaluation]:
-        """Get all cases that have edits."""
-        return [e for e in self.evaluations.values() if e.has_edits()]
+    class Config:
+        # Allow set type in JSON schema
+        json_schema_extra = {
+            "reviewed_case_ids": {"type": "array", "items": {"type": "string"}}
+        }
 
 
 class EvaluationStore:
     """
-    Manages persistent storage of user evaluation sessions.
+    Manages lightweight tracking of user evaluation sessions.
+    
+    CaseRecord is the source of truth for evaluation data.
+    This store only tracks which cases each user has reviewed.
     
     Attributes:
         evaluations_dir: Path to the evaluations storage directory
@@ -114,7 +105,7 @@ class EvaluationStore:
             session = self._load_session_from_file(session_file)
             session.last_updated = datetime.now().isoformat()
             print(f"✓ Loaded existing session for {user_email}")
-            print(f"  - {len(session.evaluations)} cases previously reviewed")
+            print(f"  - {len(session.reviewed_case_ids)} cases previously reviewed")
         else:
             session = self._create_new_session(user_email)
             print(f"✓ Created new session for {user_email}")
@@ -137,7 +128,7 @@ class EvaluationStore:
             session_id=session_id,
             started_at=now,
             last_updated=now,
-            evaluations={}
+            reviewed_case_ids=set()
         )
     
     def _load_session_from_file(self, file_path: Path) -> UserSession:
@@ -145,17 +136,12 @@ class EvaluationStore:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Convert evaluation dicts back to CaseEvaluation objects
-        evaluations = {}
-        for case_id, eval_data in data.get('evaluations', {}).items():
-            evaluations[case_id] = CaseEvaluation(**eval_data)
-        
         return UserSession(
             user_email=data['user_email'],
             session_id=data['session_id'],
             started_at=data['started_at'],
             last_updated=data['last_updated'],
-            evaluations=evaluations
+            reviewed_case_ids=set(data.get('reviewed_case_ids', []))
         )
     
     def save_session(self, session: Optional[UserSession] = None) -> None:
@@ -180,40 +166,33 @@ class EvaluationStore:
             'session_id': session.session_id,
             'started_at': session.started_at,
             'last_updated': session.last_updated,
-            'evaluations': {
-                case_id: asdict(evaluation)
-                for case_id, evaluation in session.evaluations.items()
-            }
+            'reviewed_case_ids': list(session.reviewed_case_ids)
         }
         
         with open(session_file, 'w', encoding='utf-8') as f:
             json.dump(session_dict, f, indent=2, ensure_ascii=False)
     
-    def add_evaluation(
+    def record_evaluation(
         self,
         case_id: str,
         decision: str,
-        original_vignette: str,
-        original_choice_1: Optional[str] = None,
-        original_choice_2: Optional[str] = None,
-        edited_vignette: Optional[str] = None,
-        edited_choice_1: Optional[str] = None,
-        edited_choice_2: Optional[str] = None,
+        case_loader,  # CaseLoader instance
+        updated_case: Optional[BenchmarkCandidate] = None,
         notes: Optional[str] = None
     ) -> None:
         """
-        Add or update a case evaluation in the current session.
+        Record a case evaluation by updating the CaseRecord and tracking in session.
         
         Args:
             case_id: ID of the case being evaluated
             decision: "approve" or "reject"
-            original_vignette: Original vignette text
-            original_choice_1: Original choice 1 text
-            original_choice_2: Original choice 2 text
-            edited_vignette: Edited vignette (if changed)
-            edited_choice_1: Edited choice 1 (if changed)
-            edited_choice_2: Edited choice 2 (if changed)
-            notes: Optional notes about the evaluation
+            case_loader: CaseLoader instance to load/save case records
+            updated_case: Optional edited BenchmarkCandidate
+            notes: Optional evaluation notes
+            
+        Raises:
+            ValueError: If no active session or invalid decision
+            RuntimeError: If case cannot be loaded or saved
         """
         if self.current_session is None:
             raise ValueError("No active session. Call load_or_create_session first.")
@@ -221,33 +200,90 @@ class EvaluationStore:
         if decision not in ["approve", "reject"]:
             raise ValueError(f"Invalid decision: {decision}. Must be 'approve' or 'reject'")
         
-        evaluation = CaseEvaluation(
-            case_id=case_id,
-            evaluated_at=datetime.now().isoformat(),
-            decision=decision,
-            original_vignette=original_vignette,
-            edited_vignette=edited_vignette,
-            original_choice_1=original_choice_1,
-            edited_choice_1=edited_choice_1,
-            original_choice_2=original_choice_2,
-            edited_choice_2=edited_choice_2,
-            notes=notes
-        )
+        # Load the case record (source of truth)
+        case_record = case_loader.get_case_by_id(case_id)
+        if not case_record:
+            raise RuntimeError(f"Case {case_id} not found")
         
-        self.current_session.evaluations[case_id] = evaluation
-        self.save_session()
+        try:
+            # Add evaluation to the case record
+            case_record.add_human_evaluation(
+                decision=decision,
+                evaluator=self.current_session.user_email,
+                updated_case=updated_case,
+                notes=notes
+            )
+            
+            # Save the updated case record
+            case_loader.save_case(case_record)
+            
+            # Track in session (lightweight)
+            self.current_session.reviewed_case_ids.add(case_id)
+            self.save_session()
+            
+        except Exception as e:
+            # If anything fails, don't track in session
+            raise RuntimeError(f"Failed to record evaluation: {e}")
     
     def has_reviewed(self, case_id: str) -> bool:
         """Check if a case has been reviewed in the current session."""
         if self.current_session is None:
             return False
-        return case_id in self.current_session.evaluations
+        return case_id in self.current_session.reviewed_case_ids
     
-    def get_evaluation(self, case_id: str) -> Optional[CaseEvaluation]:
-        """Get the evaluation for a specific case."""
-        if self.current_session is None:
+    def get_evaluation(self, case_id: str, case_loader) -> Optional[CaseEvaluation]:
+        """
+        Get the evaluation for a specific case by loading from CaseRecord.
+        
+        Args:
+            case_id: The case ID
+            case_loader: CaseLoader instance
+            
+        Returns:
+            CaseEvaluation view object or None if not evaluated
+        """
+        case_record = case_loader.get_case_by_id(case_id)
+        if not case_record:
             return None
-        return self.current_session.evaluations.get(case_id)
+        
+        eval_data = case_record.get_latest_evaluation()
+        if not eval_data:
+            return None
+        
+        # Reconstruct evaluation from case record
+        # Find the original (pre-evaluation) case by looking for the last non-evaluation iteration
+        eval_iteration = eval_data['iteration']
+        original_case = None
+        
+        # Look backwards from the evaluation iteration to find the last non-evaluation case
+        for i in range(eval_iteration - 1, -1, -1):
+            if i < len(case_record.refinement_history):
+                iteration_record = case_record.refinement_history[i]
+                if iteration_record.step_description != "human_evaluation":
+                    original_case = iteration_record.data
+                    break
+        
+        # If no pre-evaluation case found, use the first iteration
+        if original_case is None and len(case_record.refinement_history) > 0:
+            original_case = case_record.refinement_history[0].data
+        
+        # Current case (possibly edited) from the evaluation iteration
+        current_case = case_record.refinement_history[eval_iteration].data if eval_iteration < len(case_record.refinement_history) else case_record.final_case
+        
+        # Determine if edited
+        updated_case = None
+        if eval_data.get('has_edits'):
+            updated_case = current_case
+        
+        return CaseEvaluation(
+            case_id=case_id,
+            evaluated_at=eval_data['evaluated_at'],
+            decision=eval_data['decision'],
+            evaluator=eval_data['evaluator'],
+            original_case=original_case if isinstance(original_case, BenchmarkCandidate) else current_case,
+            updated_case=updated_case,
+            notes=eval_data.get('notes')
+        )
     
     def get_unreviewed_cases(self, all_case_ids: List[str]) -> List[str]:
         """
@@ -262,11 +298,18 @@ class EvaluationStore:
         if self.current_session is None:
             return all_case_ids
         
-        reviewed = set(self.current_session.get_reviewed_case_ids())
-        return [cid for cid in all_case_ids if cid not in reviewed]
+        return [cid for cid in all_case_ids if cid not in self.current_session.reviewed_case_ids]
     
-    def get_statistics(self) -> Dict[str, Any]:
-        """Get evaluation statistics for the current session."""
+    def get_statistics(self, case_loader) -> Dict[str, Any]:
+        """
+        Get evaluation statistics for the current session.
+        
+        Args:
+            case_loader: CaseLoader instance to load case records
+            
+        Returns:
+            Dictionary with statistics
+        """
         if self.current_session is None:
             return {
                 "total_reviewed": 0,
@@ -275,11 +318,27 @@ class EvaluationStore:
                 "with_edits": 0
             }
         
+        approved = 0
+        rejected = 0
+        with_edits = 0
+        
+        for case_id in self.current_session.reviewed_case_ids:
+            case_record = case_loader.get_case_by_id(case_id)
+            if case_record:
+                eval_data = case_record.get_latest_evaluation()
+                if eval_data:
+                    if eval_data['decision'] == 'approve':
+                        approved += 1
+                    elif eval_data['decision'] == 'reject':
+                        rejected += 1
+                    if eval_data.get('has_edits'):
+                        with_edits += 1
+        
         return {
-            "total_reviewed": len(self.current_session.evaluations),
-            "approved": len(self.current_session.get_approved_cases()),
-            "rejected": len(self.current_session.get_rejected_cases()),
-            "with_edits": len(self.current_session.get_cases_with_edits())
+            "total_reviewed": len(self.current_session.reviewed_case_ids),
+            "approved": approved,
+            "rejected": rejected,
+            "with_edits": with_edits
         }
     
     def list_all_sessions(self) -> List[Dict[str, str]]:
@@ -295,7 +354,7 @@ class EvaluationStore:
                         'session_id': data.get('session_id', 'unknown'),
                         'started_at': data.get('started_at', 'unknown'),
                         'last_updated': data.get('last_updated', 'unknown'),
-                        'num_evaluations': len(data.get('evaluations', {}))
+                        'num_evaluations': len(data.get('reviewed_case_ids', []))
                     })
             except Exception as e:
                 print(f"Warning: Could not load {session_file.name}: {e}")
@@ -306,6 +365,7 @@ class EvaluationStore:
 def main():
     """CLI utility for testing the EvaluationStore."""
     import sys
+    from src.case_loader import CaseLoader
     
     store = EvaluationStore()
     
@@ -326,12 +386,17 @@ def main():
         print(f"  Session ID: {session.session_id}")
         print(f"  Started: {session.started_at}")
         
-        stats = store.get_statistics()
-        print(f"\nStatistics:")
-        print(f"  Total reviewed: {stats['total_reviewed']}")
-        print(f"  Approved: {stats['approved']}")
-        print(f"  Rejected: {stats['rejected']}")
-        print(f"  With edits: {stats['with_edits']}")
+        # Load case loader for statistics
+        try:
+            case_loader = CaseLoader()
+            stats = store.get_statistics(case_loader)
+            print(f"\nStatistics:")
+            print(f"  Total reviewed: {stats['total_reviewed']}")
+            print(f"  Approved: {stats['approved']}")
+            print(f"  Rejected: {stats['rejected']}")
+            print(f"  With edits: {stats['with_edits']}")
+        except Exception as e:
+            print(f"\nNote: Could not load statistics: {e}")
         
         print("\n" + "-" * 80)
         print("\nAll Sessions:")

@@ -168,6 +168,56 @@ class CaseLoader:
                 continue
         
         return None
+    
+    def save_case(self, case_record: CaseRecord, overwrite_existing: bool = True) -> Path:
+        """
+        Save a case record to disk.
+        
+        Args:
+            case_record: The CaseRecord to save
+            overwrite_existing: If True, overwrites existing file with same case_id
+            
+        Returns:
+            Path to the saved file
+            
+        Raises:
+            RuntimeError: If file exists and overwrite_existing is False
+        """
+        from datetime import datetime
+        
+        # Try to find existing file for this case_id
+        existing_file = None
+        for file_path in self.scan_cases():
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if data.get('case_id') == case_record.case_id:
+                        existing_file = file_path
+                        break
+            except Exception:
+                continue
+        
+        # Determine file path
+        if existing_file and overwrite_existing:
+            file_path = existing_file
+        elif existing_file and not overwrite_existing:
+            raise RuntimeError(
+                f"Case {case_record.case_id} already exists at {existing_file}. "
+                f"Set overwrite_existing=True to update it."
+            )
+        else:
+            # Create new file
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            filename = f"case_{case_record.case_id}_{timestamp}.json"
+            file_path = self.cases_dir / filename
+        
+        # Save with proper JSON encoding
+        try:
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(case_record.model_dump(), f, indent=2, ensure_ascii=False, default=str)
+            return file_path
+        except Exception as e:
+            raise RuntimeError(f"Error saving case to {file_path}: {e}")
 
 
 def main():
