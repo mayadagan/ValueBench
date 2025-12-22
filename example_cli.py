@@ -8,6 +8,7 @@ your rich/prompt_toolkit-based evaluator.
 
 from src.case_loader import CaseLoader
 from src.evaluation_store import EvaluationStore
+from src.response_models.case import BenchmarkCandidate, ChoiceWithValues
 
 
 def simple_cli_demo():
@@ -44,7 +45,7 @@ def simple_cli_demo():
     
     if not unreviewed_ids:
         print("\n✓ All cases have been reviewed!")
-        show_statistics(store)
+        show_statistics(store, loader)
         return
     
     # Step 4: Review loop
@@ -79,38 +80,44 @@ def simple_cli_demo():
         decision = input("\nYour choice: ").strip().lower()
         
         if decision == 'a':
-            store.add_evaluation(
+            store.record_evaluation(
                 case_id=case_id,
                 decision="approve",
-                original_vignette=final.vignette,
-                original_choice_1=final.choice_1.choice,
-                original_choice_2=final.choice_2.choice
+                case_loader=loader,
+                updated_case=None,
+                notes=None
             )
             print("✓ Approved")
         
         elif decision == 'e':
             print("\n(In full UI, you'd get a text editor with prompt_toolkit)")
-            edited = input("Enter edited vignette (or press Enter to skip): ").strip()
+            edited_vignette = input("Enter edited vignette (or press Enter to skip): ").strip()
             
-            store.add_evaluation(
+            # Create edited version of the case
+            edited_case = None
+            if edited_vignette:
+                edited_case = BenchmarkCandidate(
+                    vignette=edited_vignette,
+                    choice_1=final.choice_1,
+                    choice_2=final.choice_2
+                )
+            
+            store.record_evaluation(
                 case_id=case_id,
                 decision="approve",
-                original_vignette=final.vignette,
-                original_choice_1=final.choice_1.choice,
-                original_choice_2=final.choice_2.choice,
-                edited_vignette=edited if edited else None,
-                notes="Manually edited"
+                case_loader=loader,
+                updated_case=edited_case,
+                notes="Manually edited vignette" if edited_case else None
             )
-            print("✓ Approved with edits")
+            print("✓ Approved with edits" if edited_case else "✓ Approved")
         
         elif decision == 'r':
             notes = input("Rejection reason: ").strip()
-            store.add_evaluation(
+            store.record_evaluation(
                 case_id=case_id,
                 decision="reject",
-                original_vignette=final.vignette,
-                original_choice_1=final.choice_1.choice,
-                original_choice_2=final.choice_2.choice,
+                case_loader=loader,
+                updated_case=None,
                 notes=notes
             )
             print("✓ Rejected")
@@ -123,24 +130,15 @@ def simple_cli_demo():
             print("Invalid option")
     
     # Show statistics
-    show_statistics(store)
+    show_statistics(store, loader)
     print("\n" + "=" * 70)
     print("Session saved. Run again to continue reviewing.")
     print("=" * 70)
 
 
-def extract_choice_text(choice_data):
-    """Extract choice text from either string or dict format."""
-    if isinstance(choice_data, str):
-        return choice_data
-    elif isinstance(choice_data, dict):
-        return choice_data.get('choice', '')
-    return ''
-
-
-def show_statistics(store):
+def show_statistics(store, loader):
     """Display evaluation statistics."""
-    stats = store.get_statistics()
+    stats = store.get_statistics(loader)
     print("\n📈 Statistics:")
     print(f"  Total reviewed: {stats['total_reviewed']}")
     print(f"  ✓ Approved:     {stats['approved']}")
