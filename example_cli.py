@@ -74,8 +74,7 @@ def simple_cli_demo():
         print("  [a] Approve as-is")
         print("  [e] Edit then approve")
         print("  [r] Reject")
-        print("  [s] Skip for now")
-        print("  [q] Quit")
+        print("  [q] Quit (case will remain unreviewed)")
         
         decision = input("\nYour choice: ").strip().lower()
         
@@ -116,17 +115,6 @@ def simple_cli_demo():
             )
             print("✓ Rejected")
         
-        elif decision == 's':
-            store.add_evaluation(
-                case_id=case_id,
-                decision="pending",
-                original_vignette=final.vignette,
-                original_choice_1=final.choice_1.choice,
-                original_choice_2=final.choice_2.choice,
-                notes="Skipped for later review"
-            )
-            print("⏭ Skipped")
-        
         elif decision == 'q':
             print("\nQuitting...")
             break
@@ -157,7 +145,6 @@ def show_statistics(store):
     print(f"  Total reviewed: {stats['total_reviewed']}")
     print(f"  ✓ Approved:     {stats['approved']}")
     print(f"  ✗ Rejected:     {stats['rejected']}")
-    print(f"  ⏸ Pending:      {stats['pending']}")
     print(f"  ✏ With edits:   {stats['with_edits']}")
 
 

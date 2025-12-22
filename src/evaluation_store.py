@@ -20,7 +20,7 @@ class CaseEvaluation:
     """Record of a single case evaluation."""
     case_id: str
     evaluated_at: str
-    decision: str  # "approve", "reject", or "pending"
+    decision: str  # "approve" or "reject"
     original_vignette: str
     edited_vignette: Optional[str] = None
     original_choice_1: Optional[str] = None
@@ -58,10 +58,6 @@ class UserSession:
     def get_rejected_cases(self) -> List[CaseEvaluation]:
         """Get all rejected case evaluations."""
         return [e for e in self.evaluations.values() if e.decision == "reject"]
-    
-    def get_pending_cases(self) -> List[CaseEvaluation]:
-        """Get all pending case evaluations."""
-        return [e for e in self.evaluations.values() if e.decision == "pending"]
     
     def get_cases_with_edits(self) -> List[CaseEvaluation]:
         """Get all cases that have edits."""
@@ -210,7 +206,7 @@ class EvaluationStore:
         
         Args:
             case_id: ID of the case being evaluated
-            decision: "approve", "reject", or "pending"
+            decision: "approve" or "reject"
             original_vignette: Original vignette text
             original_choice_1: Original choice 1 text
             original_choice_2: Original choice 2 text
@@ -222,8 +218,8 @@ class EvaluationStore:
         if self.current_session is None:
             raise ValueError("No active session. Call load_or_create_session first.")
         
-        if decision not in ["approve", "reject", "pending"]:
-            raise ValueError(f"Invalid decision: {decision}. Must be 'approve', 'reject', or 'pending'")
+        if decision not in ["approve", "reject"]:
+            raise ValueError(f"Invalid decision: {decision}. Must be 'approve' or 'reject'")
         
         evaluation = CaseEvaluation(
             case_id=case_id,
@@ -276,7 +272,6 @@ class EvaluationStore:
                 "total_reviewed": 0,
                 "approved": 0,
                 "rejected": 0,
-                "pending": 0,
                 "with_edits": 0
             }
         
@@ -284,7 +279,6 @@ class EvaluationStore:
             "total_reviewed": len(self.current_session.evaluations),
             "approved": len(self.current_session.get_approved_cases()),
             "rejected": len(self.current_session.get_rejected_cases()),
-            "pending": len(self.current_session.get_pending_cases()),
             "with_edits": len(self.current_session.get_cases_with_edits())
         }
     
@@ -337,7 +331,6 @@ def main():
         print(f"  Total reviewed: {stats['total_reviewed']}")
         print(f"  Approved: {stats['approved']}")
         print(f"  Rejected: {stats['rejected']}")
-        print(f"  Pending: {stats['pending']}")
         print(f"  With edits: {stats['with_edits']}")
         
         print("\n" + "-" * 80)
